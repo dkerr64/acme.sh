@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-VER=2.8.3
+VER=2.8.4
 
 PROJECT_NAME="acme.sh"
 
@@ -90,6 +90,9 @@ DEBUG_LEVEL_3=3
 DEBUG_LEVEL_DEFAULT=$DEBUG_LEVEL_1
 DEBUG_LEVEL_NONE=0
 
+DOH_CLOUDFLARE=1
+DOH_GOOGLE=2
+
 HIDDEN_VALUE="[hidden](please add '--output-insecure' to see this value)"
 
 SYSLOG_ERROR="user.error"
@@ -175,7 +178,7 @@ _printargs() {
     printf -- "%s" "$1='$2'"
   fi
   printf "\n"
-  # return the saved exit status 
+  # return the saved exit status
   return "$_exitstatus"
 }
 
@@ -1697,18 +1700,37 @@ _post() {
     if [ "$HTTPS_INSECURE" ]; then
       _CURL="$_CURL --insecure  "
     fi
+    if [ "$httpmethod" = "HEAD" ]; then
+      _CURL="$_CURL -I  "
+    fi
     _debug "_CURL" "$_CURL"
     if [ "$needbase64" ]; then
-      if [ "$_postContentType" ]; then
-        response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "Content-Type: $_postContentType" -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" --data "$body" "$_post_url" | _base64)"
+      if [ "$body" ]; then
+        if [ "$_postContentType" ]; then
+          response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "Content-Type: $_postContentType" -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" --data "$body" "$_post_url" | _base64)"
+        else
+          response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" --data "$body" "$_post_url" | _base64)"
+        fi
       else
-        response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" --data "$body" "$_post_url" | _base64)"
+        if [ "$_postContentType" ]; then
+          response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "Content-Type: $_postContentType" -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" "$_post_url" | _base64)"
+        else
+          response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" "$_post_url" | _base64)"
+        fi
       fi
     else
-      if [ "$_postContentType" ]; then
-        response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "Content-Type: $_postContentType" -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" --data "$body" "$_post_url")"
+      if [ "$body" ]; then
+        if [ "$_postContentType" ]; then
+          response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "Content-Type: $_postContentType" -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" --data "$body" "$_post_url")"
+        else
+          response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" --data "$body" "$_post_url")"
+        fi
       else
-        response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" --data "$body" "$_post_url")"
+        if [ "$_postContentType" ]; then
+          response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "Content-Type: $_postContentType" -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" "$_post_url")"
+        else
+          response="$($_CURL --user-agent "$USER_AGENT" -X $httpmethod -H "$_H1" -H "$_H2" -H "$_H3" -H "$_H4" -H "$_H5" "$_post_url")"
+        fi
       fi
     fi
     _ret="$?"
@@ -1723,6 +1745,9 @@ _post() {
     _WGET="$_ACME_WGET"
     if [ "$HTTPS_INSECURE" ]; then
       _WGET="$_WGET --no-check-certificate "
+    fi
+    if [ "$httpmethod" = "HEAD" ]; then
+      _WGET="$_WGET --read-timeout=3.0  --tries=2  "
     fi
     _debug "_WGET" "$_WGET"
     if [ "$needbase64" ]; then
@@ -1745,6 +1770,12 @@ _post() {
           response="$($_WGET -S -O - --user-agent="$USER_AGENT" --header "$_H5" --header "$_H4" --header "$_H3" --header "$_H2" --header "$_H1" --header "Content-Type: $_postContentType" --post-data="$body" "$_post_url" 2>"$HTTP_HEADER")"
         else
           response="$($_WGET -S -O - --user-agent="$USER_AGENT" --header "$_H5" --header "$_H4" --header "$_H3" --header "$_H2" --header "$_H1" --post-data="$body" "$_post_url" 2>"$HTTP_HEADER")"
+        fi
+      elif [ "$httpmethod" = "HEAD" ]; then
+        if [ "$_postContentType" ]; then
+          response="$($_WGET --spider -S -O - --user-agent="$USER_AGENT" --header "$_H5" --header "$_H4" --header "$_H3" --header "$_H2" --header "$_H1" --header "Content-Type: $_postContentType" --post-data="$body" "$_post_url" 2>"$HTTP_HEADER")"
+        else
+          response="$($_WGET --spider -S -O - --user-agent="$USER_AGENT" --header "$_H5" --header "$_H4" --header "$_H3" --header "$_H2" --header "$_H1" --post-data="$body" "$_post_url" 2>"$HTTP_HEADER")"
         fi
       else
         if [ "$_postContentType" ]; then
@@ -1878,7 +1909,7 @@ _send_signed_request() {
       if [ "$ACME_NEW_NONCE" ]; then
         _debug2 "Get nonce with HEAD. ACME_NEW_NONCE" "$ACME_NEW_NONCE"
         nonceurl="$ACME_NEW_NONCE"
-        if _post "" "$nonceurl" "" "HEAD" "$__request_conent_type"; then
+        if _post "" "$nonceurl" "" "HEAD" "$__request_conent_type" >/dev/null; then
           _headers="$(cat "$HTTP_HEADER")"
           _debug2 _headers "$_headers"
           _CACHED_NONCE="$(echo "$_headers" | grep -i "Replay-Nonce:" | _head_n 1 | tr -d "\r\n " | cut -d ':' -f 2)"
@@ -2799,6 +2830,11 @@ _setNginx() {
       _debug NGINX_CONF "$NGINX_CONF"
       NGINX_CONF="$(echo "$NGINX_CONF" | cut -d = -f 2)"
       _debug NGINX_CONF "$NGINX_CONF"
+      if [ -z "$NGINX_CONF" ]; then
+        _err "Can not find nginx conf."
+        NGINX_CONF=""
+        return 1
+      fi
       if [ ! -f "$NGINX_CONF" ]; then
         _err "'$NGINX_CONF' doesn't exist."
         NGINX_CONF=""
@@ -3603,7 +3639,7 @@ __trigger_validation() {
 }
 
 #endpoint  domain type
-_ns_lookup() {
+_ns_lookup_impl() {
   _ns_ep="$1"
   _ns_domain="$2"
   _ns_type="$3"
@@ -3627,7 +3663,7 @@ _ns_lookup_cf() {
   _cf_ld="$1"
   _cf_ld_type="$2"
   _cf_ep="https://cloudflare-dns.com/dns-query"
-  _ns_lookup "$_cf_ep" "$_cf_ld" "$_cf_ld_type"
+  _ns_lookup_impl "$_cf_ep" "$_cf_ld" "$_cf_ld_type"
 }
 
 #domain, type
@@ -3640,6 +3676,44 @@ _ns_purge_cf() {
   _debug2 response "$response"
 }
 
+#checks if cf server is available
+_ns_is_available_cf() {
+  if _get "https://cloudflare-dns.com" >/dev/null 2>&1; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+#domain, type
+_ns_lookup_google() {
+  _cf_ld="$1"
+  _cf_ld_type="$2"
+  _cf_ep="https://dns.google/resolve"
+  _ns_lookup_impl "$_cf_ep" "$_cf_ld" "$_cf_ld_type"
+}
+
+#domain, type
+_ns_lookup() {
+  if [ -z "$DOH_USE" ]; then
+    _debug "Detect dns server first."
+    if _ns_is_available_cf; then
+      _debug "Use cloudflare doh server"
+      export DOH_USE=$DOH_CLOUDFLARE
+    else
+      _debug "Use google doh server"
+      export DOH_USE=$DOH_GOOGLE
+    fi
+  fi
+
+  if [ "$DOH_USE" = "$DOH_CLOUDFLARE" ] || [ -z "$DOH_USE" ]; then
+    _ns_lookup_cf "$@"
+  else
+    _ns_lookup_google "$@"
+  fi
+
+}
+
 #txtdomain, alias, txt
 __check_txt() {
   _c_txtdomain="$1"
@@ -3648,7 +3722,7 @@ __check_txt() {
   _debug "_c_txtdomain" "$_c_txtdomain"
   _debug "_c_aliasdomain" "$_c_aliasdomain"
   _debug "_c_txt" "$_c_txt"
-  _answers="$(_ns_lookup_cf "$_c_aliasdomain" TXT)"
+  _answers="$(_ns_lookup "$_c_aliasdomain" TXT)"
   _contains "$_answers" "$_c_txt"
 
 }
@@ -3657,7 +3731,13 @@ __check_txt() {
 __purge_txt() {
   _p_txtdomain="$1"
   _debug _p_txtdomain "$_p_txtdomain"
-  _ns_purge_cf "$_p_txtdomain" "TXT"
+  if [ "$DOH_USE" = "$DOH_CLOUDFLARE" ] || [ -z "$DOH_USE" ]; then
+    _ns_purge_cf "$_p_txtdomain" "TXT"
+  else
+    _debug "no purge api for google dns api, just sleep 5 secs"
+    _sleep 5
+  fi
+
 }
 
 #wait and check each dns entries
@@ -4941,18 +5021,14 @@ list() {
   if [ "$_raw" ]; then
     printf "%s\n" "Main_Domain${_sep}KeyLength${_sep}SAN_Domains${_sep}Created${_sep}Renew"
     for di in "${CERT_HOME}"/*.*/; do
-      if ! [ -d "$di" ]; then
-        _debug "Not directory, skip: $di"
-        continue
-      fi
       d=$(basename "$di")
       _debug d "$d"
       (
         if _endswith "$d" "$ECC_SUFFIX"; then
-          _isEcc=$(echo "$d" | cut -d "$ECC_SEP" -f 2)
+          _isEcc="ecc"
           d=$(echo "$d" | cut -d "$ECC_SEP" -f 1)
         fi
-        _initpath "$d" "$_isEcc"
+        DOMAIN_CONF="$di/$d.conf"
         if [ -f "$DOMAIN_CONF" ]; then
           . "$DOMAIN_CONF"
           printf "%s\n" "$Le_Domain${_sep}\"$Le_Keylength\"${_sep}$Le_Alt${_sep}$Le_CertCreateTimeStr${_sep}$Le_NextRenewTimeStr"
@@ -6139,7 +6215,7 @@ Parameters:
   --branch, -b                      Only valid for '--upgrade' command, specifies the branch name to upgrade to.
 
   --notify-level  0|1|2|3           Set the notification level:  Default value is $NOTIFY_LEVEL_DEFAULT.
-                                     0: disabled, no notification will be sent. 
+                                     0: disabled, no notification will be sent.
                                      1: send notifications only when there is an error.
                                      2: send notifications when a cert is successfully renewed, or there is an error.
                                      3: send notifications when a cert is skipped, renewed, or error.
@@ -6241,8 +6317,8 @@ _checkSudo() {
       #it's root using sudo, no matter it's using sudo or not, just fine
       return 0
     fi
-    if [ "$SUDO_COMMAND" = "/bin/su" ]; then
-      #it's a normal user doing "sudo su"
+    if [ "$SUDO_COMMAND" = "/bin/su" ] || [ "$SUDO_COMMAND" = "/bin/bash" ]; then
+      #it's a normal user doing "sudo su", or `sudo -i` or `sudo -s`
       #fine
       return 0
     fi
@@ -6503,6 +6579,10 @@ _process() {
         ;;
       --nginx)
         wvalue="$NGINX"
+        if [ "$2" ] && ! _startswith "$2" "-"; then
+          wvalue="$NGINX$2"
+          shift
+        fi
         if [ -z "$_webroot" ]; then
           _webroot="$wvalue"
         else
