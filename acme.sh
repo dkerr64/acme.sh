@@ -265,6 +265,37 @@ _usage() {
   printf "\n" >&2
 }
 
+__debug_bash_helper() {
+  # At this point only do for --debug 3
+  if [ "${DEBUG:-$DEBUG_LEVEL_NONE}" -lt "$DEBUG_LEVEL_3" ]; then
+    return
+  fi
+  # Return extra debug info when running with bash, otherwise return empty
+  # string.
+  if [ -z "${BASH_VERSION}" ]; then
+    return
+  fi
+  # We are a bash shell at this point, return the filename, function name, and
+  # line number as a string
+  _dbh_saveIFS=$IFS
+  IFS=" "
+  # Must use eval or syntax error happens under dash. The eval should use
+  # single quotes as older versions of busybox had a bug with double quotes and
+  # eval.
+  # Use 'caller 1' as we want one level up the stack as we should be called
+  # by one of the _debug* functions
+  eval '_dbh_called=($(caller 1))'
+  IFS=$_dbh_saveIFS
+  eval '_dbh_file=${_dbh_called[2]}'
+  if [ -n "${_script_home}" ]; then
+    # Trim off the _script_home directory name
+    eval '_dbh_file=${_dbh_file#$_script_home/}'
+  fi
+  eval '_dbh_function=${_dbh_called[1]}'
+  eval '_dbh_lineno=${_dbh_called[0]}'
+  printf "%-40s " "$_dbh_file:${_dbh_function}:${_dbh_lineno}"
+}
+
 _debug() {
   if [ "${LOG_LEVEL:-$DEFAULT_LOG_LEVEL}" -ge "$LOG_LEVEL_1" ]; then
     _log "$@"
@@ -273,7 +304,8 @@ _debug() {
     _syslog "$SYSLOG_DEBUG" "$@"
   fi
   if [ "${DEBUG:-$DEBUG_LEVEL_NONE}" -ge "$DEBUG_LEVEL_1" ]; then
-    _printargs "$@" >&2
+    _bash_debug=$(__debug_bash_helper)
+    _printargs "${_bash_debug}$@" >&2
   fi
 }
 
@@ -306,7 +338,8 @@ _debug2() {
     _syslog "$SYSLOG_DEBUG" "$@"
   fi
   if [ "${DEBUG:-$DEBUG_LEVEL_NONE}" -ge "$DEBUG_LEVEL_2" ]; then
-    _printargs "$@" >&2
+    _bash_debug=$(__debug_bash_helper)
+    _printargs "${_bash_debug}$@" >&2
   fi
 }
 
@@ -338,7 +371,8 @@ _debug3() {
     _syslog "$SYSLOG_DEBUG" "$@"
   fi
   if [ "${DEBUG:-$DEBUG_LEVEL_NONE}" -ge "$DEBUG_LEVEL_3" ]; then
-    _printargs "$@" >&2
+    _bash_debug=$(__debug_bash_helper)
+    _printargs "${_bash_debug}$@" >&2
   fi
 }
 
@@ -3331,7 +3365,7 @@ _on_issue_success() {
     fi
   fi
 
-  if _hasfield "$Le_Webroot" "$W_DNS"; then
+  if _hasfield "$Le_Webroot" "$W_DNS" && [ -z "$FORCE_DNS_MANUAL" ]; then
     _err "$_DNS_MANUAL_WARN"
   fi
 
@@ -6070,7 +6104,7 @@ _send_notify() {
 _set_notify_hook() {
   _nhooks="$1"
 
-  _test_subject="Hello, this is notification from $PROJECT_NAME"
+  _test_subject="Hello, this is a notification from $PROJECT_NAME"
   _test_content="If you receive this message, your notification works."
 
   _send_notify "$_test_subject" "$_test_content" "$_nhooks" 0
