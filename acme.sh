@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-VER=2.8.6
+VER=2.8.7
 
 PROJECT_NAME="acme.sh"
 
@@ -137,6 +137,8 @@ _DNS_MANUAL_WIKI="https://github.com/acmesh-official/acme.sh/wiki/dns-manual-mod
 _NOTIFY_WIKI="https://github.com/acmesh-official/acme.sh/wiki/notify"
 
 _SUDO_WIKI="https://github.com/acmesh-official/acme.sh/wiki/sudo"
+
+_REVOKE_WIKI="https://github.com/acmesh-official/acme.sh/wiki/revokecert"
 
 _DNS_MANUAL_ERR="The dns manual mode can not renew automatically, you must issue it again manually. You'd better use the other modes instead."
 
@@ -1172,9 +1174,8 @@ _createcsr() {
     _info "Multi domain" "$alt"
     printf -- "\nsubjectAltName=$alt" >>"$csrconf"
   fi
-  if [ "$Le_OCSP_Staple" ] || [ "$Le_OCSP_Stable" ]; then
+  if [ "$Le_OCSP_Staple" = "1" ]; then
     _savedomainconf Le_OCSP_Staple "$Le_OCSP_Staple"
-    _cleardomainconf Le_OCSP_Stable
     printf -- "\nbasicConstraints = CA:FALSE\n1.3.6.1.5.5.7.1.24=DER:30:03:02:01:05" >>"$csrconf"
   fi
 
@@ -3512,6 +3513,8 @@ updateaccount() {
   if [ "$ACME_VERSION" = "2" ]; then
     if [ "$ACCOUNT_EMAIL" ]; then
       updjson='{"contact": ["mailto:'$ACCOUNT_EMAIL'"]}'
+    else
+      updjson='{"contact": []}'
     fi
   else
     # ACMEv1: Updates happen the same way a registration is done.
@@ -5454,6 +5457,7 @@ uninstallcronjob() {
 
 }
 
+#domain  isECC  revokeReason
 revoke() {
   Le_Domain="$1"
   if [ -z "$Le_Domain" ]; then
@@ -5462,7 +5466,10 @@ revoke() {
   fi
 
   _isEcc="$2"
-
+  _reason="$3"
+  if [ -z "$_reason" ]; then
+    _reason="0"
+  fi
   _initpath "$Le_Domain" "$_isEcc"
   if [ ! -f "$DOMAIN_CONF" ]; then
     _err "$Le_Domain is not a issued domain, skip."
@@ -5484,7 +5491,7 @@ revoke() {
   _initAPI
 
   if [ "$ACME_VERSION" = "2" ]; then
-    data="{\"certificate\": \"$cert\"}"
+    data="{\"certificate\": \"$cert\",\"reason\":$_reason}"
   else
     data="{\"resource\": \"revoke-cert\", \"certificate\": \"$cert\"}"
   fi
@@ -6293,6 +6300,7 @@ Parameters:
                                      0: Bulk mode. Send all the domain's notifications in one message(mail).
                                      1: Cert mode. Send a message for every single cert.
   --notify-hook   [hookname]        Set the notify hook
+  --revoke-reason [0-10]            The reason for '--revoke' command. See: $_REVOKE_WIKI
 
 "
 }
@@ -6468,6 +6476,7 @@ _process() {
   _notify_hook=""
   _notify_level=""
   _notify_mode=""
+  _revoke_reason=""
   while [ ${#} -gt 0 ]; do
     case "${1}" in
 
@@ -6940,6 +6949,14 @@ _process() {
         _notify_mode="$_nmode"
         shift
         ;;
+      --revoke-reason)
+        _revoke_reason="$2"
+        if _startswith "$_revoke_reason" "-"; then
+          _err "'$_revoke_reason' is not a integer for '$1'"
+          return 1
+        fi
+        shift
+        ;;
       *)
         _err "Unknown parameter : $1"
         return 1
@@ -7027,7 +7044,7 @@ _process() {
       renewAll "$_stopRenewOnError"
       ;;
     revoke)
-      revoke "$_domain" "$_ecc"
+      revoke "$_domain" "$_ecc" "$_revoke_reason"
       ;;
     remove)
       remove "$_domain" "$_ecc"
